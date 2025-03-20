@@ -236,15 +236,21 @@ class CursorChatViewer:
                         
                         # Try to decompress and extract metadata
                         try:
-                            if value[:2] == b'x\x9c':  # zlib magic number
-                                decompressed = zlib.decompress(value)
-                                json_str = decompressed.decode('utf-8', errors='ignore')
+                            # Check if value is a string already
+                            if isinstance(value, str):
+                                json_str = value
                                 date_str = self.extract_date_from_json(json_str)
                                 title = self.extract_title_from_json(json_str)
                             else:
-                                json_str = value.decode('utf-8', errors='ignore')
-                                date_str = self.extract_date_from_json(json_str)
-                                title = self.extract_title_from_json(json_str)
+                                if value[:2] == b'x\x9c':  # zlib magic number
+                                    decompressed = zlib.decompress(value)
+                                    json_str = decompressed.decode('utf-8', errors='ignore')
+                                    date_str = self.extract_date_from_json(json_str)
+                                    title = self.extract_title_from_json(json_str)
+                                else:
+                                    json_str = value.decode('utf-8', errors='ignore')
+                                    date_str = self.extract_date_from_json(json_str)
+                                    title = self.extract_title_from_json(json_str)
                         except:
                             date_str = "Unknown"
                             title = ""
@@ -283,15 +289,19 @@ class CursorChatViewer:
             
             # Try to decode the BLOB data
             try:
-                # First try to decompress with zlib if it looks compressed
-                try:
-                    if value[:2] == b'x\x9c':  # zlib magic number
-                        value = zlib.decompress(value)
-                except Exception:
-                    pass
-                
-                # Try to decode as UTF-8 text
-                text = value.decode('utf-8')
+                # Check if value is already a string
+                if isinstance(value, str):
+                    text = value
+                else:
+                    # First try to decompress with zlib if it looks compressed
+                    try:
+                        if value[:2] == b'x\x9c':  # zlib magic number
+                            value = zlib.decompress(value)
+                    except Exception:
+                        pass
+                    
+                    # Try to decode as UTF-8 text
+                    text = value.decode('utf-8')
                 
                 # Check if it's JSON and format it
                 try:
@@ -303,10 +313,13 @@ class CursorChatViewer:
                 self.content_text.insert(tk.END, text)
             except UnicodeDecodeError:
                 # If UTF-8 decoding fails, show hex representation
-                hex_view = ' '.join(f'{b:02x}' for b in value[:1000])
-                self.content_text.insert(tk.END, f"Binary data (showing first 1000 bytes):\n{hex_view}")
-                if len(value) > 1000:
-                    self.content_text.insert(tk.END, f"\n... {len(value) - 1000} more bytes ...")
+                if isinstance(value, bytes):
+                    hex_view = ' '.join(f'{b:02x}' for b in value[:1000])
+                    self.content_text.insert(tk.END, f"Binary data (showing first 1000 bytes):\n{hex_view}")
+                    if len(value) > 1000:
+                        self.content_text.insert(tk.END, f"\n... {len(value) - 1000} more bytes ...")
+                else:
+                    self.content_text.insert(tk.END, f"Unable to display content: {type(value)}")
             
             self.status_var.set(f"Viewing chat: {key}")
         except Exception as e:
@@ -327,15 +340,19 @@ class CursorChatViewer:
             
             # Try to decode the BLOB data
             try:
-                # First try to decompress with zlib if it looks compressed
-                try:
-                    if value[:2] == b'x\x9c':  # zlib magic number
-                        value = zlib.decompress(value)
-                except Exception:
-                    pass
-                
-                # Try to decode as UTF-8 text
-                text = value.decode('utf-8')
+                # Check if value is already a string
+                if isinstance(value, str):
+                    text = value
+                else:
+                    # First try to decompress with zlib if it looks compressed
+                    try:
+                        if value[:2] == b'x\x9c':  # zlib magic number
+                            value = zlib.decompress(value)
+                    except Exception:
+                        pass
+                    
+                    # Try to decode as UTF-8 text
+                    text = value.decode('utf-8')
                 
                 # Try to parse as JSON and format as chat
                 try:
@@ -380,10 +397,13 @@ class CursorChatViewer:
                     self.content_text.insert(tk.END, text)
             except UnicodeDecodeError:
                 # If UTF-8 decoding fails, show hex representation
-                hex_view = ' '.join(f'{b:02x}' for b in value[:1000])
-                self.content_text.insert(tk.END, f"Binary data (showing first 1000 bytes):\n{hex_view}")
-                if len(value) > 1000:
-                    self.content_text.insert(tk.END, f"\n... {len(value) - 1000} more bytes ...")
+                if isinstance(value, bytes):
+                    hex_view = ' '.join(f'{b:02x}' for b in value[:1000])
+                    self.content_text.insert(tk.END, f"Binary data (showing first 1000 bytes):\n{hex_view}")
+                    if len(value) > 1000:
+                        self.content_text.insert(tk.END, f"\n... {len(value) - 1000} more bytes ...")
+                else:
+                    self.content_text.insert(tk.END, f"Unable to display content: {type(value)}")
             
             self.status_var.set(f"Formatted chat: {key}")
         except Exception as e:
@@ -413,11 +433,14 @@ class CursorChatViewer:
             
             # Process data
             try:
-                if value[:2] == b'x\x9c':
-                    value = zlib.decompress(value)
+                if isinstance(value, bytes):
+                    if value[:2] == b'x\x9c':
+                        value = zlib.decompress(value)
+                    text = value.decode('utf-8')
+                else:
+                    text = value  # Already a string
                 
                 # Try to decode and format as JSON
-                text = value.decode('utf-8')
                 try:
                     json_data = json.loads(text)
                     formatted_json = json.dumps(json_data, indent=2)
@@ -460,11 +483,12 @@ class CursorChatViewer:
             
             # Process data
             try:
-                if value[:2] == b'x\x9c':
-                    value = zlib.decompress(value)
-                
-                # Try to decode as text
-                text = value.decode('utf-8')
+                if isinstance(value, bytes):
+                    if value[:2] == b'x\x9c':
+                        value = zlib.decompress(value)
+                    text = value.decode('utf-8')
+                else:
+                    text = value  # Already a string
                 
                 # If it's JSON, try to extract meaningful content
                 try:
@@ -508,9 +532,12 @@ class CursorChatViewer:
                 self.status_var.set(f"Exported to {file_path}")
             except UnicodeDecodeError:
                 # If binary, save as binary
-                with open(file_path, 'wb') as f:
-                    f.write(value)
-                self.status_var.set(f"Exported binary data to {file_path}")
+                if isinstance(value, bytes):
+                    with open(file_path, 'wb') as f:
+                        f.write(value)
+                    self.status_var.set(f"Exported binary data to {file_path}")
+                else:
+                    messagebox.showerror("Export Error", "Cannot handle this data type")
         except Exception as e:
             self.status_var.set(f"Error exporting: {str(e)}")
             messagebox.showerror("Export Error", str(e))
