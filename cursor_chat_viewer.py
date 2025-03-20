@@ -20,6 +20,7 @@ class CursorChatViewer:
         self.default_path = os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb")
         
         self.db_path = tk.StringVar(value=self.default_path)
+        self.key_prefix = tk.StringVar(value="composerData:")
         self.setup_ui()
         self.chat_data = []
         
@@ -36,6 +37,17 @@ class CursorChatViewer:
         ttk.Entry(path_frame, textvariable=self.db_path, width=50).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(path_frame, text="Browse", command=self.browse_db).pack(side=tk.LEFT, padx=5)
         ttk.Button(path_frame, text="Connect", command=self.load_chats).pack(side=tk.LEFT, padx=5)
+        
+        # Key prefix frame
+        prefix_frame = ttk.Frame(main_frame)
+        prefix_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(prefix_frame, text="Key Prefix:").pack(side=tk.LEFT, padx=(0, 5))
+        prefixes = ["composerData:", "chat:", "session:", ""]
+        prefix_combo = ttk.Combobox(prefix_frame, textvariable=self.key_prefix, values=prefixes, width=15)
+        prefix_combo.pack(side=tk.LEFT)
+        ttk.Label(prefix_frame, text="(Leave empty to show all keys)").pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Button(prefix_frame, text="Analyze DB", command=self.analyze_db).pack(side=tk.LEFT, padx=10)
         
         # Split view with a panedwindow
         paned = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
@@ -207,13 +219,20 @@ class CursorChatViewer:
             cursor.execute("SELECT key, value FROM cursorDiskKV")
             rows = cursor.fetchall()
             
+            # Get the key prefix to filter by
+            key_prefix = self.key_prefix.get()
+            
             # Filter and process chat records
             chat_rows = []
             for key, value in rows:
-                # Only include items that look like chat records
-                if key.startswith('chat:'):
+                # Only include items that match the prefix (or all if prefix is empty)
+                if not key_prefix or key.startswith(key_prefix):
                     try:
-                        chat_id = key.replace('chat:', '')
+                        # Remove prefix from chat_id if it exists
+                        if key_prefix and key.startswith(key_prefix):
+                            chat_id = key.replace(key_prefix, '')
+                        else:
+                            chat_id = key
                         
                         # Try to decompress and extract metadata
                         try:
@@ -231,8 +250,9 @@ class CursorChatViewer:
                             title = ""
                         
                         chat_rows.append((chat_id, date_str, key, value, title))
-                    except Exception:
+                    except Exception as e:
                         # Skip records that can't be processed
+                        print(f"Error processing record {key}: {str(e)}")
                         pass
             
             # Sort by date (most recent first) if date is available
@@ -494,6 +514,71 @@ class CursorChatViewer:
         except Exception as e:
             self.status_var.set(f"Error exporting: {str(e)}")
             messagebox.showerror("Export Error", str(e))
+    
+    def analyze_db(self):
+        """Analyze the database to identify all key prefixes and their count."""
+        try:
+            # Connect to the database
+            conn = sqlite3.connect(self.db_path.get())
+            cursor = conn.cursor()
+            
+            # Query all keys
+            cursor.execute("SELECT key FROM cursorDiskKV")
+            keys = [row[0] for row in cursor.fetchall()]
+            
+            # Analyze prefixes
+            prefixes = {}
+            for key in keys:
+                # Extract prefix (everything before the first colon)
+                parts = key.split(':', 1)
+                if len(parts) > 1:
+                    prefix = parts[0] + ':'
+                else:
+                    prefix = "(no prefix)"
+                
+                prefixes[prefix] = prefixes.get(prefix, 0) + 1
+            
+            # Sort by count (descending)
+            sorted_prefixes = sorted(prefixes.items(), key=lambda x: x[1], reverse=True)
+            
+            # Create a report
+            report = "Database Key Analysis:\n\n"
+            report += f"Total keys: {len(keys)}\n\n"
+            report += "Key prefixes found:\n"
+            for prefix, count in sorted_prefixes:
+                report += f"- {prefix}: {count} keys\n"
+            
+            # Show in dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Database Analysis")
+            dialog.geometry("400x400")
+            
+            text = scrolledtext.ScrolledText(dialog, wrap=tk.WORD)
+            text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            text.insert(tk.END, report)
+            
+            # Add buttons to set prefix
+            button_frame = ttk.Frame(dialog)
+            button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+            
+            ttk.Label(button_frame, text="Select a prefix:").pack(side=tk.LEFT)
+            
+            prefix_var = tk.StringVar()
+            prefix_combo = ttk.Combobox(button_frame, textvariable=prefix_var, 
+                                       values=[p[0] for p in sorted_prefixes if p[0] != "(no prefix)"])
+            prefix_combo.pack(side=tk.LEFT, padx=5)
+            
+            def set_prefix():
+                self.key_prefix.set(prefix_var.get())
+                dialog.destroy()
+                self.load_chats()
+            
+            ttk.Button(button_frame, text="Use This Prefix", command=set_prefix).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
+            
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Analysis Error", f"Failed to analyze database: {str(e)}")
 
 def main():
     root = tk.Tk()
