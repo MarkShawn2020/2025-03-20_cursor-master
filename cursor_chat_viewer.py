@@ -100,7 +100,6 @@ class CursorChatViewer:
         
         ttk.Button(content_control_frame, text="Export JSON", command=self.export_json).pack(side=tk.LEFT, padx=5)
         ttk.Button(content_control_frame, text="Export Text", command=self.export_text).pack(side=tk.LEFT, padx=5)
-        ttk.Button(content_control_frame, text="Format as Chat", command=self.format_as_chat).pack(side=tk.LEFT, padx=5)
         
         # Text area with scrollbar
         self.content_text = scrolledtext.ScrolledText(right_frame, wrap=tk.WORD, font=("Courier New", 11))
@@ -306,7 +305,8 @@ class CursorChatViewer:
                 # Check if it's JSON and format it
                 try:
                     json_data = json.loads(text)
-                    text = json.dumps(json_data, indent=2)
+                    # 添加ensure_ascii=False确保中文直接显示
+                    text = json.dumps(json_data, indent=2, ensure_ascii=False)
                 except json.JSONDecodeError:
                     pass
                 
@@ -325,90 +325,6 @@ class CursorChatViewer:
         except Exception as e:
             self.status_var.set(f"Error: {str(e)}")
             messagebox.showerror("Error", f"Failed to display chat content: {str(e)}")
-    
-    def format_as_chat(self):
-        selected_items = self.chat_list.selection()
-        if not selected_items:
-            messagebox.showinfo("Format", "Please select a chat to format")
-            return
-        
-        try:
-            index = int(selected_items[0])
-            _, _, key, value, _ = self.chat_data[index]
-            
-            self.content_text.delete(1.0, tk.END)
-            
-            # Try to decode the BLOB data
-            try:
-                # Check if value is already a string
-                if isinstance(value, str):
-                    text = value
-                else:
-                    # First try to decompress with zlib if it looks compressed
-                    try:
-                        if value[:2] == b'x\x9c':  # zlib magic number
-                            value = zlib.decompress(value)
-                    except Exception:
-                        pass
-                    
-                    # Try to decode as UTF-8 text
-                    text = value.decode('utf-8')
-                
-                # Try to parse as JSON and format as chat
-                try:
-                    json_data = json.loads(text)
-                    
-                    # Format the chat content
-                    formatted_text = []
-                    
-                    # Add title if available
-                    if isinstance(json_data, dict):
-                        if 'title' in json_data and json_data['title']:
-                            formatted_text.append(f"Title: {json_data['title']}\n")
-                        
-                        # Process messages
-                        if 'messages' in json_data and isinstance(json_data['messages'], list):
-                            for msg in json_data['messages']:
-                                if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
-                                    role = msg['role'].upper()
-                                    content = msg['content']
-                                    
-                                    # Add a timestamp if available
-                                    timestamp_str = ""
-                                    if 'timestamp' in msg:
-                                        try:
-                                            timestamp = int(msg['timestamp'])
-                                            if timestamp > 1000000000000:  # milliseconds
-                                                timestamp /= 1000
-                                            time_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                                            timestamp_str = f" ({time_str})"
-                                        except:
-                                            pass
-                                    
-                                    formatted_text.append(f"[{role}{timestamp_str}]\n{content}\n\n")
-                    
-                    if formatted_text:
-                        self.content_text.insert(tk.END, "\n".join(formatted_text))
-                    else:
-                        # Fall back to JSON if we couldn't format as chat
-                        self.content_text.insert(tk.END, json.dumps(json_data, indent=2))
-                except json.JSONDecodeError:
-                    # Not valid JSON, show as is
-                    self.content_text.insert(tk.END, text)
-            except UnicodeDecodeError:
-                # If UTF-8 decoding fails, show hex representation
-                if isinstance(value, bytes):
-                    hex_view = ' '.join(f'{b:02x}' for b in value[:1000])
-                    self.content_text.insert(tk.END, f"Binary data (showing first 1000 bytes):\n{hex_view}")
-                    if len(value) > 1000:
-                        self.content_text.insert(tk.END, f"\n... {len(value) - 1000} more bytes ...")
-                else:
-                    self.content_text.insert(tk.END, f"Unable to display content: {type(value)}")
-            
-            self.status_var.set(f"Formatted chat: {key}")
-        except Exception as e:
-            self.status_var.set(f"Error formatting: {str(e)}")
-            messagebox.showerror("Format Error", f"Failed to format chat content: {str(e)}")
     
     def export_json(self):
         selected_items = self.chat_list.selection()
@@ -443,7 +359,8 @@ class CursorChatViewer:
                 # Try to decode and format as JSON
                 try:
                     json_data = json.loads(text)
-                    formatted_json = json.dumps(json_data, indent=2)
+                    # 添加ensure_ascii=False确保中文直接显示
+                    formatted_json = json.dumps(json_data, indent=2, ensure_ascii=False)
                     
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(formatted_json)
